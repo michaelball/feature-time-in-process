@@ -4,6 +4,8 @@ deploy.json
 App-debug.html
 # Ignore 'local' build version of App
 App-local.html
+# Ignore deploy files
+deploy
 #IDE Files
 .idea
 .c9revisions
