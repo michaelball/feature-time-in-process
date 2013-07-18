@@ -1,0 +1,14 @@
+{
+  "name": "feature-time-in-process",
+  "version": "0.0.0",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/mdellanoce/feature-time-in-process.git"
+  },
+  "author": "Michael Dellanoce",
+  "license": "MIT",
+  "readmeFilename": "README.md",
+  "devDependencies": {
+    "rally-app-builder": "~0.7.0"
+  }
+}
