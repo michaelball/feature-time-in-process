@@ -1,11 +1,9 @@
-Iteration-Completed-Work-BurnDown
+Feature Time in Process Chart
 =========================
 
 ## Overview
 
-This app creates a type of Iteration burndown which in addition to showing task hours remaining by day also shows the total task estimate (task scope) and the number of points Complated and Accepted.
-
-![Iteration-Completed-Work-BurnDown](https://raw.github.com/wrackzone/iteration-completed-work-burndown/master/iterationburndownwithpoints.png)
+This app creates a column chart of the 80th percentile Time-in-Process of Features for each fiscal quarter. Currently project scope down is assumed.
 
 
 ## License
