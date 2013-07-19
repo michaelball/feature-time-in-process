@@ -22,7 +22,53 @@ Ext.define('CustomApp', {
 
         this._parseHangmanVariablesFromQueryString();
         this._showChart();
-        this._getWorkspaceConfig();
+
+        Deft.Promise.all([
+            this._getWorkspaceConfig(),
+            this._getTISCSnapshots(),
+            this._getCompletedOids()
+        ]).then({
+            success: Ext.bind(this._onLoad, this)
+        });
+    },
+
+    _onLoad: function(loaded) {
+        this._workspaceConfig = loaded[0];
+
+        var snapshots = loaded[1];
+        var completedOids = loaded[2];
+
+        var tiscResults = this._getTISCResults(snapshots);
+
+        var p80 = Lumenize.functions.percentileCreator(80);
+
+        var convertTicksToHours = Ext.bind(function(row) {
+            return row.ticks / this._workDayHours;
+        }, this);
+
+        var cube = new OLAPCube({
+            deriveFieldsOnInput: [
+                { field: "hours", f: convertTicksToHours },
+                { field: "month", f: Ext.bind(this._getMonth, this) }
+            ],
+            metrics: [
+                { field: "hours", f: "values" }
+            ],
+            deriveFieldsOnOutput: [
+                { field: "timeInProcess", f: function(row) { return p80(row.hours_values); } }
+            ],
+            dimensions: [
+                { field: "month" }
+            ]
+        });
+
+        var tiscResultsFilteredByCompletion = Ext.Array.filter(tiscResults, function(result) {
+            return !!completedOids[result.ObjectID];
+        });
+
+        cube.addFacts(tiscResultsFilteredByCompletion);
+
+        this._showChartData(cube.cells);
     },
 
     _getFiscalQuarter: function(row) {
@@ -81,32 +127,36 @@ Ext.define('CustomApp', {
     },
 
     _getWorkspaceConfig: function() {
+        var deferred = new Deft.Deferred();
         Ext.create('Rally.data.WsapiDataStore', {
             autoLoad: true,
             model: 'Workspace Configuration',
             fetch: true,
             listeners: {
-                load: this._onWorkspaceConfigLoaded,
-                scope : this
+                load: function(store) {
+                    var isCurrentWorkspace = new RegExp('^/workspace/' + __WORKSPACE_OID__ + '$');
+                    var i = store.findBy(function(record) {
+                        return isCurrentWorkspace.test(record.data.Workspace._ref);
+                    });
+                    deferred.resolve(store.getAt(i).data);
+                }
             }
         });
-    },
-
-    _onWorkspaceConfigLoaded: function(store) {
-        var isCurrentWorkspace = new RegExp('^/workspace/' + __WORKSPACE_OID__ + '$');
-        var i = store.findBy(function(record) {
-            return isCurrentWorkspace.test(record.data.Workspace._ref);
-        });
-        this._workspaceConfig = store.getAt(i).data;
-        this._getTISCResults();
+        return deferred.getPromise();
     },
     
-    _getTISCResults: function() {
+    _getTISCSnapshots: function() {
+        var deferred = new Deft.Deferred();
         Ext.create('Rally.data.lookback.SnapshotStore', {
             autoLoad : true,
             listeners: {
-                load: this._onTISCSnapShotData,
-                scope : this
+                load: function(store, models) {
+                    //Extract the raw snapshot data...
+                    var snapshots = Ext.Array.map(models, function(model){
+                        return model.data;
+                    });
+                    deferred.resolve(snapshots);
+                }
             },
             fetch: ['ObjectID', '_ProjectHierarchy', '_ValidTo', '_ValidFrom'],
             find: this._getProjectScopedQuery({
@@ -123,14 +173,38 @@ Ext.define('CustomApp', {
                 }
             })
         });
+        return deferred.getPromise();
     },
 
-    _onTISCSnapShotData : function(store, models) {
-        //Extract the raw snapshot data...
-        var snapshots = Ext.Array.map(models, function(model){
-            return model.data;
+    _getCompletedOids: function(type, afterCompletedOIDs){
+        var deferred = new Deft.Deferred();
+        Ext.create('Rally.data.lookback.SnapshotStore', {
+            autoLoad : true,
+            listeners: {
+                load: function(store, models) {
+                    //Build map of completed oids
+                    var completedOids = {};
+                    Ext.each(models, function(model) {
+                        completedOids[model.data.ObjectID] = true;
+                    });
+                    deferred.resolve(completedOids);
+                }
+            },
+            fetch: ['ObjectID', '_ProjectHierarchy', '_ValidTo', '_ValidFrom'],
+            find: this._getProjectScopedQuery({
+                '__At': this._endBefore,
+                '_TypeHierarchy':  'PortfolioItem/Feature',
+                // Not in development anymore or >= 100% done
+                '$or': [
+                    { 'State': { '$gt': 'In Dev' } },
+                    { 'PercentDoneByStoryCount': { '$gte': 1 } }
+                ]
+            })
         });
+        return deferred.getPromise();
+    },
 
+    _getTISCResults: function(snapshots) {
         var config = {
             granularity: 'hour',
             tz: this._workspaceConfig.TimeZone,
@@ -160,67 +234,7 @@ Ext.define('CustomApp', {
         var tisc = new TimeInStateCalculator(config);
         tisc.addSnapshots(snapshots, this._startOn, this._endBefore);
 
-        this._tiscResults = tisc.getResults();
-
-        this._getCompletedOids();
-    },
-
-    _getCompletedOids: function(type, afterCompletedOIDs){
-        Ext.create('Rally.data.lookback.SnapshotStore', {
-            autoLoad : true,
-            listeners: {
-                load: this._onCompletedOids,
-                scope : this
-            },
-            fetch: ['ObjectID', '_ProjectHierarchy', '_ValidTo', '_ValidFrom'],
-            find: this._getProjectScopedQuery({
-                '__At': this._endBefore,
-                '_TypeHierarchy':  'PortfolioItem/Feature',
-                // Not in development anymore or >= 100% done
-                '$or': [
-                    { 'State': { '$gt': 'In Dev' } },
-                    { 'PercentDoneByStoryCount': { '$gte': 1 } }
-                ]
-            })
-        });
-    },
-
-    _onCompletedOids: function(store, models) {
-        //Build map of completed oids
-        var completedOids = {};
-        Ext.each(models, function(model) {
-            completedOids[model.data.ObjectID] = true;
-        });
-
-        var p80 = Lumenize.functions.percentileCreator(80);
-
-        var convertTicksToHours = Ext.bind(function(row) {
-            return row.ticks / this._workDayHours;
-        }, this);
-
-        var cube = new OLAPCube({
-            deriveFieldsOnInput: [
-                { field: "hours", f: convertTicksToHours },
-                { field: "month", f: Ext.bind(this._getMonth, this) }
-            ],
-            metrics: [
-                { field: "hours", f: "values" }
-            ],
-            deriveFieldsOnOutput: [
-                { field: "timeInProcess", f: function(row) { return p80(row.hours_values); } }
-            ],
-            dimensions: [
-                { field: "month" }
-            ]
-        });
-
-        var tiscResultsFilteredByCompletion = Ext.Array.filter(this._tiscResults, function(result) {
-            return !!completedOids[result.ObjectID];
-        });
-
-        cube.addFacts(tiscResultsFilteredByCompletion);
-
-        this._showChartData(cube.cells);
+        return tisc.getResults();
     },
 
     _showChart : function() {
