@@ -1,3 +1,9 @@
+//Get reference to Lumenize
+var Lumenize = window.parent.Rally.data.lookback.Lumenize,
+    OLAPCube = Lumenize.OLAPCube,
+    Time = Lumenize.Time,
+    TimeInStateCalculator = Lumenize.TimeInStateCalculator;
+
 Ext.define('CustomApp', {
     extend: 'Rally.app.App',
     componentCls: 'app',
@@ -10,19 +16,17 @@ Ext.define('CustomApp', {
     ],
 
     launch: function() {
-        //get reference to lumenize
-        this._lumenize = window.parent.Rally.data.lookback.Lumenize;
-
         //Time range is epoch to current month
         this._startOn = '2011-12';
-        this._endBefore = new this._lumenize.Time(new Date()).inGranularity(this._lumenize.Time.MONTH).toString();
+        this._endBefore = new Time(new Date()).inGranularity(Time.MONTH).toString();
 
         this._parseHangmanVariablesFromQueryString();
+        this._showChart();
         this._getWorkspaceConfig();
     },
 
-    _getFiscalQuarter: function(validToTimeString) {
-        var Time = this._lumenize.Time;
+    _getFiscalQuarter: function(row) {
+        var validToTimeString = row._ValidTo_lastValue;
         var timezome = this._workspaceConfig.TimeZone;
 
         //Assumes fiscal quarters are offset 1 month (in the future) from calendar quarters
@@ -49,6 +53,11 @@ Ext.define('CustomApp', {
 
         var year = (quarter.year + 1).toString();
         return 'FY' + year.substring(2) + 'Q' + quarter.quarter;
+    },
+
+    _getMonth: function(row) {
+        var timezome = this._workspaceConfig.TimeZone;
+        return new Time(row._ValidTo_lastValue, Time.MONTH, timezome).inGranularity(Time.MONTH).toString();
     },
 
     _parseHangmanVariablesFromQueryString: function() {
@@ -148,7 +157,7 @@ Ext.define('CustomApp', {
         }
         this._workDayHours = workMinutes / 60;
 
-        var tisc = new this._lumenize.TimeInStateCalculator(config);
+        var tisc = new TimeInStateCalculator(config);
         tisc.addSnapshots(snapshots, this._startOn, this._endBefore);
 
         this._tiscResults = tisc.getResults();
@@ -183,20 +192,16 @@ Ext.define('CustomApp', {
             completedOids[model.data.ObjectID] = true;
         });
 
-        var p80 = this._lumenize.functions.percentileCreator(80);
+        var p80 = Lumenize.functions.percentileCreator(80);
 
         var convertTicksToHours = Ext.bind(function(row) {
             return row.ticks / this._workDayHours;
         }, this);
 
-        var fiscalQuarter = Ext.bind(function(row) {
-            return this._getFiscalQuarter(row._ValidTo_lastValue);
-        }, this);
-
-        var cube = new this._lumenize.OLAPCube({
+        var cube = new OLAPCube({
             deriveFieldsOnInput: [
                 { field: "hours", f: convertTicksToHours },
-                { field: "quarter", f: fiscalQuarter }
+                { field: "month", f: Ext.bind(this._getMonth, this) }
             ],
             metrics: [
                 { field: "hours", f: "values" }
@@ -205,7 +210,7 @@ Ext.define('CustomApp', {
                 { field: "timeInProcess", f: function(row) { return p80(row.hours_values); } }
             ],
             dimensions: [
-                { field: "quarter" }
+                { field: "month" }
             ]
         });
 
@@ -215,57 +220,31 @@ Ext.define('CustomApp', {
 
         cube.addFacts(tiscResultsFilteredByCompletion);
 
-        this._showChart(cube.cells);
+        this._showChartData(cube.cells);
     },
 
-    _showChart : function(cells) {
-
-        //Sort ascending by quarter
-        cells.sort(function(a, b) {
-            if (a.quarter < b.quarter) {
-                return -1;
-            } else if (a.quarter > b.quarter) {
-                return 1;
-            } else {
-                return 0;
-            }
-        });
-
-        var quarters = Ext.Array.map(cells, function(cell) {
-            return cell.quarter;
-        });
-
-        var timeInProcess = Ext.Array.map(cells, function(cell) {
-            return cell.timeInProcess;
-        });
-
+    _showChart : function() {
         var chart = this.down("#chart1");
         chart.removeAll();
         
-        var extChart = Ext.create('Rally.ui.chart.Chart', {
+        this._extChart = Ext.create('Rally.ui.chart.Chart', {
             width: 800,
             height: 500,
             chartData: {
-                categories : quarters,
-                series : [
-                    {
-                        data: timeInProcess,
-                        name: 'Time in Process'
-                    }
-                ]
+                categories: [],
+                series : []
             },
             chartConfig : {
                 chart: {
                     type: 'column'
                 },
                 title: {
-                    text: 'Feature Time in Process',
-                    x: -20 //center
+                    text: 'Feature Time in Process'
                 },                        
                 xAxis: {
                     tickInterval : 1,
                     title: {
-                        text: 'Fiscal Quarters'
+                        text: 'Months'
                     }
                 },
                 yAxis: [{
@@ -295,13 +274,42 @@ Ext.define('CustomApp', {
                 }
             }
         });
-        chart.add(extChart);
+        chart.add(this._extChart);
+    },
 
-        var p = Ext.get(chart.id);
-        var elems = p.query("div.x-mask");
-        Ext.each(elems, function(e) { e.remove(); });
-        elems = p.query("div.x-mask-msg");
-        Ext.each(elems, function(e) { e.remove(); });
+    _showChartData: function(cells) {
+        //Sort ascending by month
+        cells.sort(function(a, b) {
+            if (a.month < b.month) {
+                return -1;
+            } else if (a.month > b.month) {
+                return 1;
+            } else {
+                return 0;
+            }
+        });
+
+        var months = Ext.Array.map(cells, function(cell) {
+            return cell.month;
+        });
+
+        var timeInProcess = Ext.Array.map(cells, function(cell) {
+            return cell.timeInProcess;
+        });
+
+        //Call _unmask() because setLoading(false) doesn't work
+        this._extChart._unmask();
+
+        //Grab the chart's chart's chart
+        var chart = this._extChart.down('highchart').chart;
+
+        //Now we have the nice highcharts interface we all know and love
+        chart.xAxis[0].setCategories(months, true);
+        chart.addSeries({
+            name: 'Time in Process',
+            data: timeInProcess,
+            color: this._extChart.chartColors[0]
+        });
     },
 
     _federalHolidays: function() {
