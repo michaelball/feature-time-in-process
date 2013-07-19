@@ -40,25 +40,32 @@ Ext.define('CustomApp', {
 
         var tiscResults = this._getTISCResults(snapshots);
 
-        var p80 = Lumenize.functions.percentileCreator(80);
-
         var convertTicksToHours = Ext.bind(function(row) {
             return row.ticks / this._workDayHours;
         }, this);
 
+        var deriveFieldsOnOutput = Ext.Array.map([25, 50, 75], function(percentile) {
+            var p = Lumenize.functions.percentileCreator(percentile);
+            return {
+                field: "timeInProcessP" + percentile,
+                f: function(row) {
+                    return p(row.hours_values);
+                }
+            };
+        });
+
         var cube = new OLAPCube({
             deriveFieldsOnInput: [
                 { field: "hours", f: convertTicksToHours },
-                { field: "month", f: Ext.bind(this._getMonth, this) }
+                { field: "date", f: Ext.bind(this._getMonth, this) }
             ],
             metrics: [
-                { field: "hours", f: "values" }
+                { field: "hours", f: "values" },
+                { field: "hours", f: "average", as: "timeInProcessAverage" }
             ],
-            deriveFieldsOnOutput: [
-                { field: "timeInProcess", f: function(row) { return p80(row.hours_values); } }
-            ],
+            deriveFieldsOnOutput: deriveFieldsOnOutput,
             dimensions: [
-                { field: "month" }
+                { field: "date" }
             ]
         });
 
@@ -263,7 +270,7 @@ Ext.define('CustomApp', {
                 },
                 yAxis: [{
                     title: {
-                        text: 'p80 Time in Process (days)'
+                        text: 'Time in Process (days)'
                     },
                     plotLines: [{
                         value: 0,
@@ -272,19 +279,12 @@ Ext.define('CustomApp', {
                     }]
                 }],
                 tooltip: {
-                    valueSuffix: ''
+                    valueSuffix : ' days',
+                    shared: true
                 },
                 legend: {
                     align: 'center',
                     verticalAlign: 'bottom'
-                },
-                plotOptions : {
-                    column: {
-                       stacking: 'normal',
-                       tooltip : {
-                           valueSuffix : ' days'
-                       }
-                    }
                 }
             }
         });
@@ -292,23 +292,26 @@ Ext.define('CustomApp', {
     },
 
     _showChartData: function(cells) {
-        //Sort ascending by month
+        //Sort ascending by date
         cells.sort(function(a, b) {
-            if (a.month < b.month) {
+            if (a.date < b.date) {
                 return -1;
-            } else if (a.month > b.month) {
+            } else if (a.date > b.date) {
                 return 1;
             } else {
                 return 0;
             }
         });
 
-        var months = Ext.Array.map(cells, function(cell) {
-            return cell.month;
+        var dates = Ext.Array.map(cells, function(cell) {
+            return cell.date;
         });
 
-        var timeInProcess = Ext.Array.map(cells, function(cell) {
-            return cell.timeInProcess;
+        var timeInProcessMedian = Ext.Array.map(cells, function(cell) {
+            return cell.timeInProcessP50;
+        });
+        var timeInProcessError = Ext.Array.map(cells, function(cell) {
+            return { low: cell.timeInProcessP25, y: cell.timeInProcessP50, high: cell.timeInProcessP75 };
         });
 
         //Call _unmask() because setLoading(false) doesn't work
@@ -318,11 +321,16 @@ Ext.define('CustomApp', {
         var chart = this._extChart.down('highchart').chart;
 
         //Now we have the nice highcharts interface we all know and love
-        chart.xAxis[0].setCategories(months, true);
+        chart.xAxis[0].setCategories(dates, true);
         chart.addSeries({
-            name: 'Time in Process',
-            data: timeInProcess,
-            color: this._extChart.chartColors[0]
+            name: 'Time in Process (Median)',
+            data: timeInProcessMedian,
+            color: this._extChart.chartColors[1]
+        });
+        chart.addSeries({
+            type: 'errorbar',
+            name: 'Time in Process (P25/P75)',
+            data: timeInProcessError
         });
     },
 
