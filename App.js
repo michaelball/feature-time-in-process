@@ -20,19 +20,41 @@ Ext.define('CustomApp', {
         startOn: '2011-12',
         endBefore: new Time(new Date()).inGranularity(Time.MONTH).toString(),
         granularity: Time.MONTH,
-        typeHierarchy: 'PortfolioItem/Feature'
+        progressPredicate: {
+            // Features in development and < 100 % done
+            '_TypeHierarchy': 'PortfolioItem/Feature',
+            'State': 'In Dev',
+            'PercentDoneByStoryCount': {
+                '$lt': 1,
+                '$gt': 0
+            }
+        },
+        completePredicate: {
+            // Features not in development anymore or >= 100% done
+            '_TypeHierarchy': 'PortfolioItem/Feature',
+            '$or': [
+                { 'State': { '$gt': 'In Dev' } },
+                { 'PercentDoneByStoryCount': { '$gte': 1 } }
+            ]
+        }
     },
 
     constructor: function(config) {
         if (typeof(CustomAppConfig) !== 'undefined') {
-            Ext.merge(config, CustomAppConfig);
+            Ext.apply(config, CustomAppConfig);
         }
         this.callParent(arguments);
 
-        this._workspaceConfig = this.getContext().getWorkspace().WorkspaceConfiguration;
-    },
+        //callParent apparently does a deep merge on config... not what we want, so fix it
+        if (config.progressPredicate) {
+            this.setProgressPredicate(config.progressPredicate);
+        }
+        if (config.completePredicate) {
+            this.setCompletePredicate(config.completePredicate);
+        }
 
-    launch: function() {
+        this._workspaceConfig = this.getContext().getWorkspace().WorkspaceConfiguration;
+
         this._parseHangmanVariablesFromQueryString();
         this._showChart();
 
@@ -42,6 +64,12 @@ Ext.define('CustomApp', {
         ]).then({
             success: Ext.bind(this._onLoad, this)
         });
+    },
+
+    launch: function() {
+        //launch gets called *before* constructor???
+        //well played AppSDK. well played.
+        //see constructor for the real launching of things...
     },
 
     _onLoad: function(loaded) {
@@ -195,19 +223,12 @@ Ext.define('CustomApp', {
                 }
             },
             fetch: ['ObjectID', '_ProjectHierarchy', '_ValidTo', '_ValidFrom'],
-            find: this._getProjectScopedQuery({
+            find: this._getProjectScopedQuery(Ext.merge({
                 '_ValidFrom': {
                     '$gte': this.getStartOn(),
                     '$lt': this.getEndBefore()
-                },
-                '_TypeHierarchy': this.getTypeHierarchy(),
-                // In development and < 100 % done
-                'State': 'In Dev',
-                'PercentDoneByStoryCount': {
-                    '$lt': 1,
-                    '$gt': 0
                 }
-            })
+            }, this.getProgressPredicate()))
         });
         return deferred.getPromise();
     },
@@ -227,15 +248,9 @@ Ext.define('CustomApp', {
                 }
             },
             fetch: ['ObjectID', '_ProjectHierarchy', '_ValidTo', '_ValidFrom'],
-            find: this._getProjectScopedQuery({
-                '__At': this.getEndBefore(),
-                '_TypeHierarchy':  this.getTypeHierarchy(),
-                // Not in development anymore or >= 100% done
-                '$or': [
-                    { 'State': { '$gt': 'In Dev' } },
-                    { 'PercentDoneByStoryCount': { '$gte': 1 } }
-                ]
-            })
+            find: this._getProjectScopedQuery(Ext.merge({
+                '__At': this.getEndBefore()
+            }, this.getCompletePredicate()))
         });
         return deferred.getPromise();
     },
@@ -253,7 +268,7 @@ Ext.define('CustomApp', {
 
             holidays: this._federalHolidays(),
 
-            trackLastValueForTheseFields: ["_ValidTo", "_ProjectHierarchy"]
+            trackLastValueForTheseFields: ["_ValidTo"]
         };
 
         // store number of hours in a work day
@@ -288,7 +303,7 @@ Ext.define('CustomApp', {
                     type: 'column'
                 },
                 title: {
-                    text: 'Feature Time in Process'
+                    text: 'Time in Process'
                 },                        
                 xAxis: {
                     tickInterval : 1,
