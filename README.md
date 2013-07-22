@@ -17,7 +17,7 @@ Define a global object called ```CustomAppConfig``` before the app launches, lik
 
 ```
 var CustomAppConfig = {
-	xAxis: 'quarters',              //Allowed values: 'months', 'quarters', 'fiscalQuarters', 'points', 'featureSize'
+	xAxis: 'quarters',              //Allowed values: 'months', 'quarters', 'fiscalQuarters', 'storyPoints', 'featureSize'
 	type: 'PortfolioItem/Feature'   //Allowed values: 'PortfolioItem/Feature', 'HierarchicalRequirement'
 };
 ```

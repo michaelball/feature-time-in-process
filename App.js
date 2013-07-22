@@ -209,7 +209,7 @@ Ext.define('CustomApp', {
         this._xAxisStrategies = {
             'fiscalQuarter': new FiscalQuarters(this.getStartOn(), this.getEndBefore(), this._workspaceConfig.TimeZone),
             'month': new Months(this.getStartOn(), this.getEndBefore(), this._workspaceConfig.TimeZone),
-            'points': new StoryPoints(),
+            'storyPoints': new StoryPoints(),
             'featureSize': new FeatureSize(),
             'quarter': new Quarters(this.getStartOn(), this.getEndBefore(), this._workspaceConfig.TimeZone)
         };
@@ -217,7 +217,7 @@ Ext.define('CustomApp', {
         this._xAxisStrategy = this._xAxisStrategies[this.getXAxis()];
 
         //Force type based on xAxis value
-        if (this.getXAxis() === 'points') {
+        if (this.getXAxis() === 'storyPoints') {
             this.setType('HierarchicalRequirement');
         }
         if (this.getXAxis() === 'featureSize') {
