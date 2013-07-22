@@ -15,11 +15,22 @@ Ext.define('CustomApp', {
         }
     ],
 
-    launch: function() {
+    config: {
         //Time range is epoch to current month
-        this._startOn = '2011-12';
-        this._endBefore = new Time(new Date()).inGranularity(Time.MONTH).toString();
+        startOn: '2011-12',
+        endBefore: new Time(new Date()).inGranularity(Time.MONTH).toString(),
+        granularity: Time.MONTH,
+        typeHierarchy: 'PortfolioItem/Feature'
+    },
 
+    constructor: function(config) {
+        if (typeof(CustomAppConfig) !== 'undefined') {
+            Ext.merge(config, CustomAppConfig);
+        }
+        this.callParent(arguments);
+    },
+
+    launch: function() {
         this._parseHangmanVariablesFromQueryString();
         this._showChart();
 
@@ -57,7 +68,7 @@ Ext.define('CustomApp', {
         var cube = new OLAPCube({
             deriveFieldsOnInput: [
                 { field: "hours", f: convertTicksToHours },
-                { field: "date", f: Ext.bind(this._getMonth, this) }
+                { field: "category", f: Ext.bind(this._getCategory, this) }
             ],
             metrics: [
                 { field: "hours", f: "values" },
@@ -65,7 +76,7 @@ Ext.define('CustomApp', {
             ],
             deriveFieldsOnOutput: deriveFieldsOnOutput,
             dimensions: [
-                { field: "date" }
+                { field: "category" }
             ]
         });
 
@@ -75,11 +86,11 @@ Ext.define('CustomApp', {
 
         cube.addFacts(tiscResultsFilteredByCompletion);
 
-        this._showChartData(cube.cells);
+        this._showChartData(cube);
     },
 
-    _getFiscalQuarter: function(row) {
-        var validToTimeString = row._ValidTo_lastValue;
+    _getFiscalQuarter: function(value) {
+        var validToTimeString = value._ValidTo_lastValue || value;
         var timezome = this._workspaceConfig.TimeZone;
 
         //Assumes fiscal quarters are offset 1 month (in the future) from calendar quarters
@@ -108,9 +119,47 @@ Ext.define('CustomApp', {
         return 'FY' + year.substring(2) + 'Q' + quarter.quarter;
     },
 
-    _getMonth: function(row) {
+    _getQuarter: function(value) {
         var timezome = this._workspaceConfig.TimeZone;
-        return new Time(row._ValidTo_lastValue, Time.MONTH, timezome).inGranularity(Time.MONTH).toString();
+        return new Time(value._ValidTo_lastValue || value, Time.QUARTER, timezome).inGranularity(Time.QUARTER).toString();
+    },
+
+    _getMonth: function(value) {
+        var timezome = this._workspaceConfig.TimeZone;
+        return new Time(value._ValidTo_lastValue || value, Time.MONTH, timezome).inGranularity(Time.MONTH).toString();
+    },
+
+    _getCategory: function(value) {
+        var granularity = this.getGranularity(),
+            granularityMethod = this['_get' + granularity[0].toUpperCase() + granularity.substring(1)];
+        return granularityMethod.call(this, value);
+    },
+
+    _getCategories: function() {
+        var cursor = new Time(this.getStartOn()).inGranularity(Time.MONTH),
+            end = new Time(this.getEndBefore()).inGranularity(Time.MONTH),
+            uniqueCategories = {},
+            categories = [];
+
+        while (cursor.lessThanOrEqual(end)) {
+            uniqueCategories[this._getCategory(cursor.toString())] = true;
+            cursor = cursor.add(1);
+        }
+
+        Ext.Object.each(uniqueCategories, function(key, value) {
+            categories.push(key);
+        });
+
+        categories.sort();
+
+        return categories;
+    },
+
+    _getXAxisLabel: function() {
+        var words = this.getGranularity().replace(/[a-z][A-Z]/g, function(joint) {
+            return joint[0] + ' ' + joint[1];
+        });
+        return words[0].toUpperCase() + words.substring(1) + 's';
     },
 
     _parseHangmanVariablesFromQueryString: function() {
@@ -168,10 +217,10 @@ Ext.define('CustomApp', {
             fetch: ['ObjectID', '_ProjectHierarchy', '_ValidTo', '_ValidFrom'],
             find: this._getProjectScopedQuery({
                 '_ValidFrom': {
-                    '$gte': this._startOn,
-                    '$lt': this._endBefore
+                    '$gte': this.getStartOn(),
+                    '$lt': this.getEndBefore()
                 },
-                '_TypeHierarchy': 'PortfolioItem/Feature',
+                '_TypeHierarchy': this.getTypeHierarchy(),
                 // In development and < 100 % done
                 'State': 'In Dev',
                 'PercentDoneByStoryCount': {
@@ -199,8 +248,8 @@ Ext.define('CustomApp', {
             },
             fetch: ['ObjectID', '_ProjectHierarchy', '_ValidTo', '_ValidFrom'],
             find: this._getProjectScopedQuery({
-                '__At': this._endBefore,
-                '_TypeHierarchy':  'PortfolioItem/Feature',
+                '__At': this.getEndBefore(),
+                '_TypeHierarchy':  this.getTypeHierarchy(),
                 // Not in development anymore or >= 100% done
                 '$or': [
                     { 'State': { '$gt': 'In Dev' } },
@@ -216,7 +265,7 @@ Ext.define('CustomApp', {
             granularity: 'hour',
             tz: this._workspaceConfig.TimeZone,
             workDays: this._workspaceConfig.WorkDays.split(','),
-            endBefore: this._endBefore,
+            endBefore: this.getEndBefore(),
 
             // assume 9-5
             workDayStartOn: {hour: 9, minute: 0},
@@ -239,7 +288,7 @@ Ext.define('CustomApp', {
         this._workDayHours = workMinutes / 60;
 
         var tisc = new TimeInStateCalculator(config);
-        tisc.addSnapshots(snapshots, this._startOn, this._endBefore);
+        tisc.addSnapshots(snapshots, this.getStartOn(), this.getEndBefore());
 
         return tisc.getResults();
     },
@@ -265,7 +314,7 @@ Ext.define('CustomApp', {
                 xAxis: {
                     tickInterval : 1,
                     title: {
-                        text: 'Months'
+                        text: this._getXAxisLabel()
                     }
                 },
                 yAxis: [{
@@ -291,27 +340,20 @@ Ext.define('CustomApp', {
         chart.add(this._extChart);
     },
 
-    _showChartData: function(cells) {
-        //Sort ascending by date
-        cells.sort(function(a, b) {
-            if (a.date < b.date) {
-                return -1;
-            } else if (a.date > b.date) {
-                return 1;
+    _showChartData: function(cube) {
+        var categories = this._getCategories();
+
+        var timeInProcessMedian = _.map(categories, function(category) {
+            var cell = cube.getCell({ category: category });
+            return cell ? cell.timeInProcessP50 : null;
+        });
+        var timeInProcessError = _.map(categories, function(category) {
+            var cell = cube.getCell({ category: category });
+            if (cell) {
+                return { low: cell.timeInProcessP25, y: cell.timeInProcessP75, high: cell.timeInProcessP75 };
             } else {
-                return 0;
+                return null;
             }
-        });
-
-        var dates = Ext.Array.map(cells, function(cell) {
-            return cell.date;
-        });
-
-        var timeInProcessMedian = Ext.Array.map(cells, function(cell) {
-            return cell.timeInProcessP50;
-        });
-        var timeInProcessError = Ext.Array.map(cells, function(cell) {
-            return { low: cell.timeInProcessP25, y: cell.timeInProcessP50, high: cell.timeInProcessP75 };
         });
 
         //Call _unmask() because setLoading(false) doesn't work
@@ -321,11 +363,11 @@ Ext.define('CustomApp', {
         var chart = this._extChart.down('highchart').chart;
 
         //Now we have the nice highcharts interface we all know and love
-        chart.xAxis[0].setCategories(dates, true);
+        chart.xAxis[0].setCategories(categories, true);
         chart.addSeries({
             name: 'Time in Process (Median)',
             data: timeInProcessMedian,
-            color: this._extChart.chartColors[1]
+            color: this._extChart.chartColors[0]
         });
         chart.addSeries({
             type: 'errorbar',
