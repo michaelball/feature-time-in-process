@@ -278,7 +278,6 @@ Ext.define('CustomApp', {
         chart.removeAll();
         
         this._extChart = Ext.create('Rally.ui.chart.Chart', {
-            width: 800,
             height: 500,
             chartData: {
                 categories: [],
