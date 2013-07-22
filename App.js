@@ -4,6 +4,86 @@ var Lumenize = window.parent.Rally.data.lookback.Lumenize,
     Time = Lumenize.Time,
     TimeInStateCalculator = Lumenize.TimeInStateCalculator;
 
+function Months(startOn, endBefore, timezone) {
+    var cursor = new Time(startOn).inGranularity(Time.MONTH),
+        end = new Time(endBefore).inGranularity(Time.MONTH),
+        categories = [];
+
+    while (cursor.lessThanOrEqual(end)) {
+        categories.push(cursor.toString());
+        cursor = cursor.add(1);
+    }
+
+    this.categories = categories;
+    this.label = 'Months';
+
+    this.categorize = function(value) {
+        return new Time(value._ValidTo_lastValue || value, Time.MONTH, timezone).inGranularity(Time.MONTH).toString();
+    };
+};
+
+function Quarters(startOn, endBefore, timezone) {
+    var cursor = new Time(startOn).inGranularity(Time.QUARTER),
+        end = new Time(endBefore).inGranularity(Time.QUARTER),
+        categories = [];
+
+    while (cursor.lessThanOrEqual(end)) {
+        categories.push(cursor.toString());
+        cursor = cursor.add(1);
+    }
+
+    this.categories = categories;
+    this.label = 'Quarters';
+
+    this.categorize = function(value) {
+        return new Time(value._ValidTo_lastValue || value, Time.QUARTER, timezone).inGranularity(Time.QUARTER).toString();
+    };
+};
+
+function FiscalQuarters(startOn, endBefore, timezone) {
+    this.label = 'Fiscal Quarters';
+
+    this.categorize = function(value) {
+        var validToTimeString = value._ValidTo_lastValue || value;
+
+        //Assumes fiscal quarters are offset 1 month (in the future) from calendar quarters
+        //The algorithm goes like this:
+        // 1) Find the calendar quarter of the validToTimeString
+        // 2) Find the start month of the calendar quarter
+        // 3) Add 1 month to the start month of the calendar quarter to find
+        //    the start month of the fiscal quarter.
+        // 4) If the validTo time (in month granularity) is less than the start
+        //    of the fiscal quarter, go back to the previous calendar quarter,
+        //    otherwise use the calendar quarter we found in step 1.
+        // 5) Format the calendar quarter as a fiscal quarter.
+        var calendarQuarter = new Time(validToTimeString, Time.QUARTER, timezone).inGranularity(Time.QUARTER);
+        var calendarQuarterStart = calendarQuarter.inGranularity(Time.MONTH);
+        var fiscalQuarterStart = calendarQuarterStart.add(1);
+        var validTo = new Time(validToTimeString, Time.MONTH, timezone).inGranularity(Time.MONTH);
+
+        var quarter;
+        if (validTo.lessThan(fiscalQuarterStart)) {
+            quarter = calendarQuarter.add(-1);
+        } else {
+            quarter = calendarQuarter;
+        }
+
+        var year = (quarter.year + 1).toString();
+        return 'FY' + year.substring(2) + 'Q' + quarter.quarter;
+    };
+
+    var cursor = new Time(startOn).inGranularity(Time.QUARTER),
+        end = new Time(endBefore).inGranularity(Time.QUARTER),
+        categories = [];
+
+    while (cursor.lessThanOrEqual(end)) {
+        categories.push(this.categorize(cursor.toString()));
+        cursor = cursor.add(1);
+    }
+
+    this.categories = categories;
+};
+
 Ext.define('CustomApp', {
     extend: 'Rally.app.App',
     componentCls: 'app',
@@ -19,7 +99,7 @@ Ext.define('CustomApp', {
         //Time range is epoch to current month
         startOn: '2011-12',
         endBefore: new Time(new Date()).inGranularity(Time.MONTH).toString(),
-        granularity: Time.MONTH,
+        xAxis: 'month',
         progressPredicate: {
             // Features in development and < 100 % done
             '_TypeHierarchy': 'PortfolioItem/Feature',
@@ -55,6 +135,14 @@ Ext.define('CustomApp', {
 
         this._workspaceConfig = this.getContext().getWorkspace().WorkspaceConfiguration;
 
+        this._xAxisStrategies = {
+            'fiscalQuarter': new FiscalQuarters(this.getStartOn(), this.getEndBefore(), this._workspaceConfig.TimeZone),
+            'month': new Months(this.getStartOn(), this.getEndBefore(), this._workspaceConfig.TimeZone),
+            'quarter': new Quarters(this.getStartOn(), this.getEndBefore(), this._workspaceConfig.TimeZone)
+        };
+
+        this._xAxisStrategy = this._xAxisStrategies[this.getXAxis()];
+
         this._parseHangmanVariablesFromQueryString();
         this._showChart();
 
@@ -82,6 +170,10 @@ Ext.define('CustomApp', {
             return row.ticks / this._workDayHours;
         }, this);
 
+        var getCategory = Ext.bind(function(row) {
+            return this._xAxisStrategy.categorize(row);
+        }, this);
+
         var deriveFieldsOnOutput = Ext.Array.map([25, 50, 75], function(percentile) {
             var p = Lumenize.functions.percentileCreator(percentile);
             return {
@@ -95,7 +187,7 @@ Ext.define('CustomApp', {
         var cube = new OLAPCube({
             deriveFieldsOnInput: [
                 { field: "hours", f: convertTicksToHours },
-                { field: "category", f: Ext.bind(this._getCategory, this) }
+                { field: "category", f: getCategory }
             ],
             metrics: [
                 { field: "hours", f: "values" },
@@ -114,79 +206,6 @@ Ext.define('CustomApp', {
         cube.addFacts(tiscResultsFilteredByCompletion);
 
         this._showChartData(cube);
-    },
-
-    _getFiscalQuarter: function(value) {
-        var validToTimeString = value._ValidTo_lastValue || value;
-        var timezome = this._workspaceConfig.TimeZone;
-
-        //Assumes fiscal quarters are offset 1 month (in the future) from calendar quarters
-        //The algorithm goes like this:
-        // 1) Find the calendar quarter of the validToTimeString
-        // 2) Find the start month of the calendar quarter
-        // 3) Add 1 month to the start month of the calendar quarter to find
-        //    the start month of the fiscal quarter.
-        // 4) If the validTo time (in month granularity) is less than the start
-        //    of the fiscal quarter, go back to the previous calendar quarter,
-        //    otherwise use the calendar quarter we found in step 1.
-        // 5) Format the calendar quarter as a fiscal quarter.
-        var calendarQuarter = new Time(validToTimeString, Time.QUARTER, timezome).inGranularity(Time.QUARTER);
-        var calendarQuarterStart = calendarQuarter.inGranularity(Time.MONTH);
-        var fiscalQuarterStart = calendarQuarterStart.add(1);
-        var validTo = new Time(validToTimeString, Time.MONTH, timezome).inGranularity(Time.MONTH);
-
-        var quarter;
-        if (validTo.lessThan(fiscalQuarterStart)) {
-            quarter = calendarQuarter.add(-1);
-        } else {
-            quarter = calendarQuarter;
-        }
-
-        var year = (quarter.year + 1).toString();
-        return 'FY' + year.substring(2) + 'Q' + quarter.quarter;
-    },
-
-    _getQuarter: function(value) {
-        var timezome = this._workspaceConfig.TimeZone;
-        return new Time(value._ValidTo_lastValue || value, Time.QUARTER, timezome).inGranularity(Time.QUARTER).toString();
-    },
-
-    _getMonth: function(value) {
-        var timezome = this._workspaceConfig.TimeZone;
-        return new Time(value._ValidTo_lastValue || value, Time.MONTH, timezome).inGranularity(Time.MONTH).toString();
-    },
-
-    _getCategory: function(value) {
-        var granularity = this.getGranularity(),
-            granularityMethod = this['_get' + granularity[0].toUpperCase() + granularity.substring(1)];
-        return granularityMethod.call(this, value);
-    },
-
-    _getCategories: function() {
-        var cursor = new Time(this.getStartOn()).inGranularity(Time.MONTH),
-            end = new Time(this.getEndBefore()).inGranularity(Time.MONTH),
-            uniqueCategories = {},
-            categories = [];
-
-        while (cursor.lessThanOrEqual(end)) {
-            uniqueCategories[this._getCategory(cursor.toString())] = true;
-            cursor = cursor.add(1);
-        }
-
-        Ext.Object.each(uniqueCategories, function(key, value) {
-            categories.push(key);
-        });
-
-        categories.sort();
-
-        return categories;
-    },
-
-    _getXAxisLabel: function() {
-        var words = this.getGranularity().replace(/[a-z][A-Z]/g, function(joint) {
-            return joint[0] + ' ' + joint[1];
-        });
-        return words[0].toUpperCase() + words.substring(1) + 's';
     },
 
     _parseHangmanVariablesFromQueryString: function() {
@@ -308,7 +327,7 @@ Ext.define('CustomApp', {
                 xAxis: {
                     tickInterval : 1,
                     title: {
-                        text: this._getXAxisLabel()
+                        text: this._xAxisStrategy.label
                     }
                 },
                 yAxis: [{
@@ -335,7 +354,7 @@ Ext.define('CustomApp', {
     },
 
     _showChartData: function(cube) {
-        var categories = this._getCategories();
+        var categories = this._xAxisStrategy.categories;
 
         var timeInProcessMedian = _.map(categories, function(category) {
             var cell = cube.getCell({ category: category });
