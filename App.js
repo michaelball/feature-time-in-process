@@ -407,7 +407,8 @@ Ext.define('CustomApp', {
             },
             chartConfig : {
                 chart: {
-                    type: 'column'
+                    type: 'column',
+                    zoomType: 'xy'
                 },
                 title: {
                     text: 'Time in Process'
