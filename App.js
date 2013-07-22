@@ -84,6 +84,56 @@ function FiscalQuarters(startOn, endBefore, timezone) {
     this.categories = categories;
 };
 
+function Feature() {
+    var typeHierarchy = 'PortfolioItem/Feature';
+    this.progressPredicate = function() {
+        return {
+            // Features in development and < 100 % done
+            '_TypeHierarchy': typeHierarchy,
+            'State': 'In Dev',
+            'PercentDoneByStoryCount': {
+                '$lt': 1,
+                '$gt': 0
+            }
+        };
+    };
+    this.completePredicate = function() {
+        return {
+            // Features not in development anymore or >= 100% done
+            '_TypeHierarchy': typeHierarchy,
+            '$or': [
+                { 'State': { '$gt': 'In Dev' } },
+                { 'PercentDoneByStoryCount': { '$gte': 1 } }
+            ]
+        };
+    };
+};
+
+function Story() {
+    var typeHierarchy = 'HierarchicalRequirement';
+    this.progressPredicate = function() {
+        return {
+            // Leaf stories in progress
+            '_TypeHierarchy': typeHierarchy,
+            'ScheduleState': {
+                '$gte': 'In-Progress',
+                '$lt': 'Accepted'
+            },
+            'Children': null
+        };
+    };
+    this.completePredicate = function() {
+        return {
+            // Leaf stories accepted
+            '_TypeHierarchy': typeHierarchy,
+            'ScheduleState': {
+                '$gte': 'Accepted'
+            },
+            'Children': null
+        };
+    };
+};
+
 Ext.define('CustomApp', {
     extend: 'Rally.app.App',
     componentCls: 'app',
@@ -100,23 +150,7 @@ Ext.define('CustomApp', {
         startOn: '2011-12',
         endBefore: new Time(new Date()).inGranularity(Time.MONTH).toString(),
         xAxis: 'month',
-        progressPredicate: {
-            // Features in development and < 100 % done
-            '_TypeHierarchy': 'PortfolioItem/Feature',
-            'State': 'In Dev',
-            'PercentDoneByStoryCount': {
-                '$lt': 1,
-                '$gt': 0
-            }
-        },
-        completePredicate: {
-            // Features not in development anymore or >= 100% done
-            '_TypeHierarchy': 'PortfolioItem/Feature',
-            '$or': [
-                { 'State': { '$gt': 'In Dev' } },
-                { 'PercentDoneByStoryCount': { '$gte': 1 } }
-            ]
-        }
+        type: 'PortfolioItem/Feature'
     },
 
     constructor: function(config) {
@@ -124,14 +158,6 @@ Ext.define('CustomApp', {
             Ext.apply(config, CustomAppConfig);
         }
         this.callParent(arguments);
-
-        //callParent apparently does a deep merge on config... not what we want, so fix it
-        if (config.progressPredicate) {
-            this.setProgressPredicate(config.progressPredicate);
-        }
-        if (config.completePredicate) {
-            this.setCompletePredicate(config.completePredicate);
-        }
 
         this._workspaceConfig = this.getContext().getWorkspace().WorkspaceConfiguration;
 
@@ -142,6 +168,13 @@ Ext.define('CustomApp', {
         };
 
         this._xAxisStrategy = this._xAxisStrategies[this.getXAxis()];
+
+        this._typeStrategies = {
+            'PortfolioItem/Feature': new Feature(),
+            'HierarchicalRequirement': new Story()
+        };
+
+        this._typeStrategy = this._typeStrategies[this.getType()];
 
         this._parseHangmanVariablesFromQueryString();
         this._showChart();
@@ -247,7 +280,7 @@ Ext.define('CustomApp', {
                     '$gte': this.getStartOn(),
                     '$lt': this.getEndBefore()
                 }
-            }, this.getProgressPredicate()))
+            }, this._typeStrategy.progressPredicate()))
         });
         return deferred.getPromise();
     },
@@ -269,7 +302,7 @@ Ext.define('CustomApp', {
             fetch: ['ObjectID', '_ProjectHierarchy', '_ValidTo', '_ValidFrom'],
             find: this._getProjectScopedQuery(Ext.merge({
                 '__At': this.getEndBefore()
-            }, this.getCompletePredicate()))
+            }, this._typeStrategy.completePredicate()))
         });
         return deferred.getPromise();
     },
