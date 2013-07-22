@@ -16,11 +16,12 @@ function Months(startOn, endBefore, timezone) {
 
     this.categories = categories;
     this.label = 'Months';
+    this.field = '_ValidTo';
 
     this.categorize = function(value) {
-        return new Time(value._ValidTo_lastValue || value, Time.MONTH, timezone).inGranularity(Time.MONTH).toString();
+        return new Time(value._ValidTo_lastValue, Time.MONTH, timezone).inGranularity(Time.MONTH).toString();
     };
-};
+}
 
 function Quarters(startOn, endBefore, timezone) {
     var cursor = new Time(startOn).inGranularity(Time.QUARTER),
@@ -34,14 +35,16 @@ function Quarters(startOn, endBefore, timezone) {
 
     this.categories = categories;
     this.label = 'Quarters';
+    this.field = '_ValidTo';
 
     this.categorize = function(value) {
-        return new Time(value._ValidTo_lastValue || value, Time.QUARTER, timezone).inGranularity(Time.QUARTER).toString();
+        return new Time(value._ValidTo_lastValue, Time.QUARTER, timezone).inGranularity(Time.QUARTER).toString();
     };
-};
+}
 
 function FiscalQuarters(startOn, endBefore, timezone) {
     this.label = 'Fiscal Quarters';
+    this.field = '_ValidTo';
 
     this.categorize = function(value) {
         var validToTimeString = value._ValidTo_lastValue || value;
@@ -82,7 +85,49 @@ function FiscalQuarters(startOn, endBefore, timezone) {
     }
 
     this.categories = categories;
-};
+}
+
+function StoryPoints() {
+
+    this.categories = ['&lt; 1', '2', '3', '5', '8', '&gt; 8'];
+    this.label = 'Story Points';
+    this.field = 'PlanEstimate';
+
+    this.categorize = function(value) {
+        var p = value.PlanEstimate_lastValue;
+        if (p < 1) {
+            return '&lt; 1';
+        } else if (p <= 2) {
+            return '2';
+        } else if (p <= 3) {
+            return '3';
+        } else if (p <= 5) {
+            return '5';
+        } else if (p <= 8) {
+            return '8';
+        } else if (p > 8) {
+            return '&gt; 8';
+        }
+    };
+}
+
+function FeatureSize() {
+    this.categories = ['Extra Small', 'Small', 'Medium', 'Large', 'Extra Large', 'Unestimated'];
+    this.label = 'Feature Size';
+    this.field = 'PreliminaryEstimate';
+
+    var sizes = {
+        4484657773: 'Extra Small',
+        4484657774: 'Small',
+        4484657775: 'Medium',
+        4484657776: 'Large',
+        4484657777: 'Extra Large'
+    };
+
+    this.categorize = function(value) {
+        return sizes[value.PreliminaryEstimate_lastValue] || 'Unestimated';
+    };
+}
 
 function Feature() {
     var typeHierarchy = 'PortfolioItem/Feature';
@@ -107,9 +152,9 @@ function Feature() {
             ]
         };
     };
-};
+}
 
-function Story() {
+function HierarchicalRequirement() {
     var typeHierarchy = 'HierarchicalRequirement';
     this.progressPredicate = function() {
         return {
@@ -132,7 +177,7 @@ function Story() {
             'Children': null
         };
     };
-};
+}
 
 Ext.define('CustomApp', {
     extend: 'Rally.app.App',
@@ -164,14 +209,24 @@ Ext.define('CustomApp', {
         this._xAxisStrategies = {
             'fiscalQuarter': new FiscalQuarters(this.getStartOn(), this.getEndBefore(), this._workspaceConfig.TimeZone),
             'month': new Months(this.getStartOn(), this.getEndBefore(), this._workspaceConfig.TimeZone),
+            'points': new StoryPoints(),
+            'featureSize': new FeatureSize(),
             'quarter': new Quarters(this.getStartOn(), this.getEndBefore(), this._workspaceConfig.TimeZone)
         };
 
         this._xAxisStrategy = this._xAxisStrategies[this.getXAxis()];
 
+        //Force type based on xAxis value
+        if (this.getXAxis() === 'points') {
+            this.setType('HierarchicalRequirement');
+        }
+        if (this.getXAxis() === 'featureSize') {
+            this.setType('PortfolioItem/Feature');
+        }
+
         this._typeStrategies = {
             'PortfolioItem/Feature': new Feature(),
-            'HierarchicalRequirement': new Story()
+            'HierarchicalRequirement': new HierarchicalRequirement()
         };
 
         this._typeStrategy = this._typeStrategies[this.getType()];
@@ -274,7 +329,7 @@ Ext.define('CustomApp', {
                     deferred.resolve(snapshots);
                 }
             },
-            fetch: ['ObjectID', '_ProjectHierarchy', '_ValidTo', '_ValidFrom'],
+            fetch: ['ObjectID', '_ValidTo', '_ValidFrom'].concat(this._xAxisStrategy.field),
             find: this._getProjectScopedQuery(Ext.merge({
                 '_ValidFrom': {
                     '$gte': this.getStartOn(),
@@ -299,7 +354,7 @@ Ext.define('CustomApp', {
                     deferred.resolve(completedOids);
                 }
             },
-            fetch: ['ObjectID', '_ProjectHierarchy', '_ValidTo', '_ValidFrom'],
+            fetch: ['ObjectID'],
             find: this._getProjectScopedQuery(Ext.merge({
                 '__At': this.getEndBefore()
             }, this._typeStrategy.completePredicate()))
@@ -320,7 +375,7 @@ Ext.define('CustomApp', {
 
             holidays: this._federalHolidays(),
 
-            trackLastValueForTheseFields: ["_ValidTo"]
+            trackLastValueForTheseFields: [this._xAxisStrategy.field]
         };
 
         // store number of hours in a work day
