@@ -28,6 +28,8 @@ Ext.define('CustomApp', {
             Ext.merge(config, CustomAppConfig);
         }
         this.callParent(arguments);
+
+        this._workspaceConfig = this.getContext().getWorkspace().WorkspaceConfiguration;
     },
 
     launch: function() {
@@ -35,7 +37,6 @@ Ext.define('CustomApp', {
         this._showChart();
 
         Deft.Promise.all([
-            this._getWorkspaceConfig(),
             this._getTISCSnapshots(),
             this._getCompletedOids()
         ]).then({
@@ -44,10 +45,8 @@ Ext.define('CustomApp', {
     },
 
     _onLoad: function(loaded) {
-        this._workspaceConfig = loaded[0];
-
-        var snapshots = loaded[1];
-        var completedOids = loaded[2];
+        var snapshots = loaded[0];
+        var completedOids = loaded[1];
 
         var tiscResults = this._getTISCResults(snapshots);
 
@@ -180,25 +179,6 @@ Ext.define('CustomApp', {
         return Ext.merge({
             '_ProjectHierarchy': Number(__PROJECT_OID__)
         }, query);
-    },
-
-    _getWorkspaceConfig: function() {
-        var deferred = new Deft.Deferred();
-        Ext.create('Rally.data.WsapiDataStore', {
-            autoLoad: true,
-            model: 'Workspace Configuration',
-            fetch: true,
-            listeners: {
-                load: function(store) {
-                    var isCurrentWorkspace = new RegExp('^/workspace/' + __WORKSPACE_OID__ + '$');
-                    var i = store.findBy(function(record) {
-                        return isCurrentWorkspace.test(record.data.Workspace._ref);
-                    });
-                    deferred.resolve(store.getAt(i).data);
-                }
-            }
-        });
-        return deferred.getPromise();
     },
     
     _getTISCSnapshots: function() {
