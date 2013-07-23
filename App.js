@@ -320,12 +320,14 @@ Ext.define('CustomApp', {
         var deferred = new Deft.Deferred();
         Ext.create('Rally.data.lookback.SnapshotStore', {
             autoLoad : true,
+            limit: Infinity,
             listeners: {
-                load: function(store, models) {
+                refresh: function(store) {
                     //Extract the raw snapshot data...
-                    var snapshots = Ext.Array.map(models, function(model){
-                        return model.data;
-                    });
+                    var snapshots = [];
+                    for (var i = 0, ii = store.getTotalCount(); i < ii; ++i) {
+                        snapshots.push(store.getAt(i).data);
+                    }
                     deferred.resolve(snapshots);
                 }
             },
@@ -344,11 +346,12 @@ Ext.define('CustomApp', {
         var deferred = new Deft.Deferred();
         Ext.create('Rally.data.lookback.SnapshotStore', {
             autoLoad : true,
+            limit: Infinity,
             listeners: {
-                load: function(store, models) {
+                refresh: function(store) {
                     //Build map of completed oids
                     var completedOids = {};
-                    Ext.each(models, function(model) {
+                    store.each(function(model) {
                         completedOids[model.data.ObjectID] = true;
                     });
                     deferred.resolve(completedOids);
