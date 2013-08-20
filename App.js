@@ -371,8 +371,8 @@ Ext.define('CustomApp', {
             endBefore: this.getEndBefore(),
 
             // assume 9-5
-            workDayStartOn: {hour: 9, minute: 0},
-            workDayEndBefore: {hour: 17, minute: 0},
+            workDayStartOn: {hour: 8, minute: 0},
+            workDayEndBefore: {hour: 18, minute: 0},
 
             holidays: this._federalHolidays(),
 
