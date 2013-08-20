@@ -177,6 +177,34 @@ function HierarchicalRequirement() {
     };
 }
 
+
+function Defect() {
+    var typeHierarchy = 'Defect';
+    this.progressPredicate = function() {
+        return {
+            // Defects in progress
+            '_TypeHierarchy': typeHierarchy,
+            'ScheduleState': {
+                '$gte': 'In-Progress',
+                '$lt': 'Accepted'
+            },
+            'Children': null
+        };
+    };
+    this.completePredicate = function() {
+        return {
+            // Defects accepted
+            '_TypeHierarchy': typeHierarchy,
+            'ScheduleState': {
+                '$gte': 'Accepted'
+            },
+            'Children': null
+        };
+    };
+}
+
+
+
 Ext.define('CustomApp', {
     extend: 'Rally.app.App',
     componentCls: 'app',
@@ -224,7 +252,8 @@ Ext.define('CustomApp', {
 
         this._typeStrategies = {
             'PortfolioItem/Feature': new Feature(),
-            'HierarchicalRequirement': new HierarchicalRequirement()
+            'HierarchicalRequirement': new HierarchicalRequirement(),
+            'Defect': new Defect()            
         };
 
         this._typeStrategy = this._typeStrategies[this.getType()];
