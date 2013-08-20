@@ -89,7 +89,7 @@ function FiscalQuarters(startOn, endBefore, timezone) {
 
 function StoryPoints() {
 
-    this.categories = ['&lt; 1', '2', '3', '5', '8', '&gt; 8'];
+    this.categories = ['&lt; 1', '1', '2', '3', '5'];
     this.label = 'Story Points';
     this.field = 'PlanEstimate';
 
@@ -97,16 +97,14 @@ function StoryPoints() {
         var p = value.PlanEstimate_lastValue;
         if (p < 1) {
             return '&lt; 1';
-        } else if (p <= 2) {
+		} else if (p == 1) {
+			return '1';    
+        } else if (p == 2) {
             return '2';
-        } else if (p <= 3) {
+        } else if (p == 3) {
             return '3';
-        } else if (p <= 5) {
+        } else if (p == 5) {
             return '5';
-        } else if (p <= 8) {
-            return '8';
-        } else if (p > 8) {
-            return '&gt; 8';
         }
     };
 }
@@ -193,7 +191,7 @@ Ext.define('CustomApp', {
     config: {
         //Time range is epoch to current month
         startOn: '2011-12',
-        endBefore: new Time(new Date()).inGranularity(Time.MONTH).toString(),
+        endBefore: new Time(new Date()).inGranularity(Time.DAY).toString(),
         xAxis: 'month',
         type: 'PortfolioItem/Feature'
     },
@@ -303,7 +301,7 @@ Ext.define('CustomApp', {
             //If it matches the hangman variable format, and is not already set globally... set it
             //Note that actual hangman variables are not set in the global scope, they are
             //string replaced into the document itself.
-            if (/^__[_A-Z]+__$/.test(key) && window[key] == null) {
+            if (/^__[_A-Z]+__$/.test(key) && window[key] === null) {
                 window[key] = value;
             }
         });

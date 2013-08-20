@@ -1,14 +1,14 @@
 {
-    "name": "featuretimeinprocess",
-    "className": "CustomApp",
-    "server": "https://rally1.rallydev.com",
-    "sdk": "2.0rc1",
-    "javascript": [
-        "https://rally1.rallydev.com/apps/2.0rc1/lib/analytics/analytics-all.js",
-        "highcharts-errorbar.js",
-        "App.js"
-    ],
-    "css": [
-        "app.css"
-    ]
+   "name": "featuretimeinprocess",
+   "className": "CustomApp",
+   "server": "https://rally1.rallydev.com",
+   "sdk": "2.0rc1",
+   "javascript": [
+      "https://rally1.rallydev.com/apps/2.0rc1/lib/analytics/analytics-all.js",
+      "highcharts-errorbar.js",
+      "App.js"
+   ],
+   "css": [
+      "app.css"
+   ]
 }
