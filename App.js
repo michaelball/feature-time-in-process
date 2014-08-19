@@ -89,7 +89,7 @@ function FiscalQuarters(startOn, endBefore, timezone) {
 
 function StoryPoints() {
 
-    this.categories = ['&lt; 1', '1', '2', '3', '5'];
+    this.categories = ['None', '1', '2', '3', '5', '8','13','20','40'];
     this.label = 'Story Points';
     this.field = 'PlanEstimate';
 
@@ -105,6 +105,14 @@ function StoryPoints() {
             return '3';
         } else if (p == 5) {
             return '5';
+         } else if (p == 8) {
+            return '8';
+         } else if (p == 13) {
+            return '13';
+         } else if (p == 20) {
+            return '20';
+         } else if (p == 40) {
+            return '40';            
         }
     };
 }
@@ -218,10 +226,10 @@ Ext.define('CustomApp', {
 
     config: {
         //Time range is epoch to current month
-        startOn: '2011-12',
+        startOn: '2014-03',
         endBefore: new Time(new Date()).inGranularity(Time.DAY).toString(),
-        xAxis: 'month',
-        type: 'PortfolioItem/Feature'
+        xAxis: 'storyPoints',
+        type: 'Defect'
     },
 
     constructor: function(config) {
@@ -244,7 +252,8 @@ Ext.define('CustomApp', {
 
         //Force type based on xAxis value
         if (this.getXAxis() === 'storyPoints') {
-            this.setType('HierarchicalRequirement');
+            // this.setType('HierarchicalRequirement');
+            this.setType('Defect');
         }
         if (this.getXAxis() === 'featureSize') {
             this.setType('PortfolioItem/Feature');
@@ -289,7 +298,7 @@ Ext.define('CustomApp', {
             return this._xAxisStrategy.categorize(row);
         }, this);
 
-        var deriveFieldsOnOutput = Ext.Array.map([25, 50, 75], function(percentile) {
+        var deriveFieldsOnOutput = Ext.Array.map([20, 50, 80], function(percentile) {  // changed to 20/80
             var p = Lumenize.functions.percentileCreator(percentile);
             return {
                 field: "timeInProcessP" + percentile,
@@ -399,7 +408,7 @@ Ext.define('CustomApp', {
             workDays: this._workspaceConfig.WorkDays.split(','),
             endBefore: this.getEndBefore(),
 
-            // assume 9-5
+            // assume 9-6
             workDayStartOn: {hour: 8, minute: 0},
             workDayEndBefore: {hour: 18, minute: 0},
 
@@ -482,7 +491,7 @@ Ext.define('CustomApp', {
         var timeInProcessError = _.map(categories, function(category) {
             var cell = cube.getCell({ category: category });
             if (cell) {
-                return { low: cell.timeInProcessP25, y: cell.timeInProcessP75, high: cell.timeInProcessP75 };
+                return { low: cell.timeInProcessP20, y: cell.timeInProcessP80, high: cell.timeInProcessP80 }; // Changed from 25/75 to 20/80
             } else {
                 return null;
             }
@@ -503,7 +512,7 @@ Ext.define('CustomApp', {
         });
         chart.addSeries({
             type: 'errorbar',
-            name: 'Time in Process (P25/P75)',
+            name: 'Time in Process (P20/P80)', 
             data: timeInProcessError
         });
     },
