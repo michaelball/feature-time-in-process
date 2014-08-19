@@ -3,6 +3,10 @@ var Lumenize = window.parent.Rally.data.lookback.Lumenize,
     OLAPCube = Lumenize.OLAPCube,
     Time = Lumenize.Time,
     TimeInStateCalculator = Lumenize.TimeInStateCalculator;
+    _startOn = '2014-01',  
+    _endBefore = new Time(new Date()).inGranularity(Time.DAY).toString(),
+    _xAxis = 'storyPoints',
+    _type = 'Defect' 
 
 function Months(startOn, endBefore, timezone) {
     var cursor = new Time(startOn).inGranularity(Time.MONTH),
@@ -226,10 +230,10 @@ Ext.define('CustomApp', {
 
     config: {
         //Time range is epoch to current month
-        startOn: '2014-01',  
-        endBefore: new Time(new Date()).inGranularity(Time.DAY).toString(),
-        xAxis: 'storyPoints',
-        type: 'Defect' 
+        startOn: this._startOn,  
+        endBefore: this._endBefore,
+        xAxis: this._xAxis,
+        type: this._type 
     },
 
     constructor: function(config) {
