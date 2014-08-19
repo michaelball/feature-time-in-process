@@ -226,10 +226,10 @@ Ext.define('CustomApp', {
 
     config: {
         //Time range is epoch to current month
-        startOn: '2014-03',
+        startOn: '2014-01',  
         endBefore: new Time(new Date()).inGranularity(Time.DAY).toString(),
         xAxis: 'storyPoints',
-        type: 'Defect'
+        type: 'Defect' 
     },
 
     constructor: function(config) {
@@ -250,14 +250,14 @@ Ext.define('CustomApp', {
 
         this._xAxisStrategy = this._xAxisStrategies[this.getXAxis()];
 
-        //Force type based on xAxis value
+        /* Force type based on xAxis value    
         if (this.getXAxis() === 'storyPoints') {
             // this.setType('HierarchicalRequirement');
             this.setType('Defect');
         }
         if (this.getXAxis() === 'featureSize') {
             this.setType('PortfolioItem/Feature');
-        }
+        } */
 
         this._typeStrategies = {
             'PortfolioItem/Feature': new Feature(),
