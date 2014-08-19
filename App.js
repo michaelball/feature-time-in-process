@@ -3,11 +3,7 @@ var Lumenize = window.parent.Rally.data.lookback.Lumenize,
     OLAPCube = Lumenize.OLAPCube,
     Time = Lumenize.Time,
     TimeInStateCalculator = Lumenize.TimeInStateCalculator;
-    _startOn = '2014-01',  
-    _endBefore = new Time(new Date()).inGranularity(Time.DAY).toString(),
-    _xAxis = 'storyPoints',
-    _type = 'Defect' 
-
+    
 function Months(startOn, endBefore, timezone) {
     var cursor = new Time(startOn).inGranularity(Time.MONTH),
         end = new Time(endBefore).inGranularity(Time.MONTH),
@@ -230,13 +226,26 @@ Ext.define('CustomApp', {
 
     config: {
         //Time range is epoch to current month
-        startOn: this._startOn,  
-        endBefore: this._endBefore,
-        xAxis: this._xAxis,
-        type: this._type 
+        endBefore: new Time(new Date()).inGranularity(Time.DAY).toString(),
+        xAxis: 'storyPoints'
     },
 
     constructor: function(config) {
+        if (!this.CustomAppConfig || !this.CustomAppConfig.startOn || !this.CustomAppConfig.type) {
+            // alert("Please set the startOn and type configuration via a CustomAppConfig object");
+            console.log("Please set the startOn and type configuration via a CustomAppConfig object");
+            /*
+            you need something like 
+            this.CustomAppConfig = {
+             startOn: '2014-01'
+             type: 'HierarchicalRequirement'
+            }
+            */
+        }
+        else {
+          this.config.startOn = this.CustomAppConfig.startOn;
+          this.config.type = this.CustomAppConfig.type;
+        }
         if (typeof(CustomAppConfig) !== 'undefined') {
             Ext.apply(config, CustomAppConfig);
         }
